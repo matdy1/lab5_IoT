@@ -23,10 +23,12 @@ public class IdentificationActivity extends AppCompatActivity {
         EditText codigo = findViewById(R.id.codigo);
         Button ingreso = findViewById(R.id.ingresar);
         ingreso.setOnClickListener(v -> {
+
             Intent intent = new Intent(IdentificationActivity.this, MainActivity.class);
             intent.putExtra("codigo", codigo.getText().toString());
             startActivity(intent);
         });
+        ;
 
         createNotificationChannels();
         askNotificationPermission();
@@ -34,33 +36,34 @@ public class IdentificationActivity extends AppCompatActivity {
 
     private void createNotificationChannels() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            NotificationChannel highImportanceChannel = new NotificationChannel(
-                    "HIGH_IMPORTANCE_CHANNEL",
-                    "High Importance Notifications",
+            NotificationChannel highChannel = new NotificationChannel(
+                    "channel_id_high",
+                    "High Importance Channel",
                     NotificationManager.IMPORTANCE_HIGH
             );
-            highImportanceChannel.setDescription("This is for high importance notifications");
+            highChannel.setDescription("This channel is used for high importance notifications.");
 
-            NotificationChannel defaultImportanceChannel = new NotificationChannel(
-                    "DEFAULT_IMPORTANCE_CHANNEL",
-                    "Default Importance Notifications",
+            NotificationChannel defaultChannel = new NotificationChannel(
+                    "channel_id_default",
+                    "Default Importance Channel",
                     NotificationManager.IMPORTANCE_DEFAULT
             );
-            defaultImportanceChannel.setDescription("This is for default importance notifications");
+            defaultChannel.setDescription("This channel is used for default importance notifications.");
 
-            NotificationChannel lowImportanceChannel = new NotificationChannel(
-                    "LOW_IMPORTANCE_CHANNEL",
-                    "Low Importance Notifications",
+            NotificationChannel lowChannel = new NotificationChannel(
+                    "channel_id_low",
+                    "Low Importance Channel",
                     NotificationManager.IMPORTANCE_LOW
             );
-            lowImportanceChannel.setDescription("This is for low importance notifications");
+            lowChannel.setDescription("This channel is used for low importance notifications.");
 
-            NotificationManager manager = getSystemService(NotificationManager.class);
-            manager.createNotificationChannel(highImportanceChannel);
-            manager.createNotificationChannel(defaultImportanceChannel);
-            manager.createNotificationChannel(lowImportanceChannel);
+            NotificationManager notificationManager = getSystemService(NotificationManager.class);
+            notificationManager.createNotificationChannel(highChannel);
+            notificationManager.createNotificationChannel(defaultChannel);
+            notificationManager.createNotificationChannel(lowChannel);
         }
     }
+
 
     private void askNotificationPermission() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {

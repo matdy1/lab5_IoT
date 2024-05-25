@@ -1,43 +1,44 @@
+
 package com.example.lab5;
-
-
-import android.app.NotificationManager;
-import android.content.Context;
-import android.content.pm.PackageManager;
-import android.os.Bundle;
-import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.app.ActivityCompat;
-import androidx.core.app.NotificationCompat;
-import androidx.core.app.NotificationManagerCompat;
-
+import android.Manifest;
+import android.app.AlarmManager;
 import android.app.DatePickerDialog;
+import android.app.PendingIntent;
 import android.app.TimePickerDialog;
+import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.os.Build;
+import android.os.Bundle;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.annotation.NonNull;
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
+
+import com.example.lab5.R;
 import com.example.lab5.entity.Task;
+
 import java.util.Calendar;
 
 public class AddEditTaskActivity extends AppCompatActivity {
 
-    private static final int NOTIFICATION_ID_TASK_COUNT = 1;
-    private static final int NOTIFICATION_ID_USER = 2;
-    private static final String CHANNEL_ID_HIGH = "HIGH_IMPORTANCE_CHANNEL";
-    private static final String CHANNEL_ID_DEFAULT = "DEFAULT_IMPORTANCE_CHANNEL";
-    private static final String CHANNEL_ID_LOW = "LOW_IMPORTANCE_CHANNEL";
+    private static final int REQUEST_SCHEDULE_EXACT_ALARM = 1;
+
     private EditText editTextTitle;
     private EditText editTextDescription;
     private TextView textViewDateTime;
     private Spinner spinnerImportance;
     private Button buttonSave;
-    private int contador;
     private Calendar dateTime;
     private boolean isEditing = false;
     private int taskIndex = -1;
+    private String userCode;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -47,13 +48,13 @@ public class AddEditTaskActivity extends AppCompatActivity {
         editTextTitle = findViewById(R.id.editTextTitle);
         editTextDescription = findViewById(R.id.editTextDescription);
         textViewDateTime = findViewById(R.id.textViewDateTime);
-        spinnerImportance= findViewById(R.id.spinnerImportance);
+        spinnerImportance = findViewById(R.id.spinnerImportance);
         buttonSave = findViewById(R.id.buttonSave);
         dateTime = Calendar.getInstance();
 
-        String codigo = getIntent().getStringExtra("codigo");
-
         Intent intent = getIntent();
+        userCode = intent.getStringExtra("codigo");
+
         if (intent.hasExtra("task")) {
             Task task = (Task) intent.getSerializableExtra("task");
             taskIndex = intent.getIntExtra("taskIndex", -1);
@@ -65,7 +66,11 @@ public class AddEditTaskActivity extends AppCompatActivity {
 
         buttonSave.setOnClickListener(v -> {
             if (isInputValid()) {
-                saveTask(codigo);
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !alarmPermissionGranted()) {
+                    requestAlarmPermission();
+                } else {
+                    saveTask();
+                }
             }
         });
     }
@@ -111,7 +116,7 @@ public class AddEditTaskActivity extends AppCompatActivity {
         return true;
     }
 
-    private void saveTask(String codigo) {
+    private void saveTask() {
         String title = editTextTitle.getText().toString().trim();
         String description = editTextDescription.getText().toString().trim();
         int importance = Task.IMPORTANCE_DEFAULT;
@@ -128,8 +133,6 @@ public class AddEditTaskActivity extends AppCompatActivity {
                 break;
         }
 
-        
-
         Task task = new Task(title, description, dateTime.getTime(), importance);
 
         Intent resultIntent = new Intent();
@@ -139,77 +142,107 @@ public class AddEditTaskActivity extends AppCompatActivity {
         }
         setResult(RESULT_OK, resultIntent);
         finish();
-        contador=contador+1;
-        showNotification(task);
-        updatePersistentNotification(codigo,contador);
 
-    }
-
-    private boolean isTaskWithinNextThreeHours(Calendar taskTime) {
-        Calendar now = Calendar.getInstance();
-        Calendar threeHoursLater = Calendar.getInstance();
-        threeHoursLater.add(Calendar.HOUR_OF_DAY, 3);
-
-        return taskTime.after(now) && taskTime.before(threeHoursLater);
-    }
-
-    private void showNotification(Task task) {
-        NotificationManager notificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
-
-        String channelId;
-        int priority;
-        switch (task.getImportance()) {
-            case Task.IMPORTANCE_HIGH:
-                channelId = CHANNEL_ID_HIGH;
-                priority = NotificationCompat.PRIORITY_HIGH;
-                break;
-            case Task.IMPORTANCE_DEFAULT:
-                channelId = CHANNEL_ID_DEFAULT;
-                priority = NotificationCompat.PRIORITY_DEFAULT;
-                break;
-            case Task.IMPORTANCE_LOW:
-                channelId = CHANNEL_ID_LOW;
-                priority = NotificationCompat.PRIORITY_LOW;
-                break;
-            default:
-                channelId = CHANNEL_ID_DEFAULT;
-                priority = NotificationCompat.PRIORITY_DEFAULT;
-                break;
+        if (importance == Task.IMPORTANCE_HIGH) {
+            scheduleHighPriorityTaskNotification(task);
+        } else if (importance == Task.IMPORTANCE_DEFAULT) {
+            scheduleDefaultPriorityTaskNotification(task);
+        } else if (importance == Task.IMPORTANCE_LOW) {
+            scheduleLowPriorityTaskNotification(task);
         }
-
-        NotificationCompat.Builder builder = new NotificationCompat.Builder(this, channelId)
-                .setSmallIcon(R.drawable.ic_notification)
-                .setContentTitle("Nueva tarea")
-                .setContentText(task.getTitle())
-                .setPriority(priority)
-                .setAutoCancel(true);
-
-        notificationManager.notify(task.hashCode(), builder.build());
     }
 
-    private void updatePersistentNotification(String codigo,int contador) {
-        NotificationManager notificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+    private void scheduleHighPriorityTaskNotification(Task task) {
+        Intent notificationIntent = new Intent(this, TaskNotificationReceiver.class);
+        notificationIntent.putExtra("taskTitle", task.getTitle());
+        notificationIntent.putExtra("taskDescription", task.getDescription());
+        notificationIntent.putExtra("taskImportance", Task.IMPORTANCE_HIGH);
 
-        int taskCount =contador;
+        PendingIntent pendingIntent = PendingIntent.getBroadcast(
+                this,
+                (int) System.currentTimeMillis(),
+                notificationIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
+        );
 
-        NotificationCompat.Builder taskCountNotificationBuilder = new NotificationCompat.Builder(this, CHANNEL_ID_LOW)
-                .setContentTitle("Tareas en curso")
-                .setContentText("Tienes " + taskCount + " tareas en curso")
-                .setSmallIcon(R.drawable.ic_notification)
-                .setOngoing(true)
-                .setPriority(NotificationCompat.PRIORITY_LOW);
-
-        NotificationCompat.Builder userNotificationBuilder = new NotificationCompat.Builder(this, CHANNEL_ID_LOW)
-                .setContentTitle("Usuario logueado")
-                .setContentText("Usuario: " + codigo)
-                .setSmallIcon(R.drawable.ic_notification)
-                .setOngoing(true)
-                .setPriority(NotificationCompat.PRIORITY_LOW);
-
-        notificationManager.notify(NOTIFICATION_ID_TASK_COUNT, taskCountNotificationBuilder.build());
-        notificationManager.notify(NOTIFICATION_ID_USER, userNotificationBuilder.build());
+        AlarmManager alarmManager = (AlarmManager) getSystemService(Context.ALARM_SERVICE);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && alarmManager.canScheduleExactAlarms()) {
+            alarmManager.setExact(AlarmManager.RTC_WAKEUP, task.getDueDate().getTime(), pendingIntent);
+        } else if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+            alarmManager.setExact(AlarmManager.RTC_WAKEUP, task.getDueDate().getTime(), pendingIntent);
+        } else {
+            Toast.makeText(this, "No se puede programar una alarma exacta, falta el permiso", Toast.LENGTH_SHORT).show();
+        }
     }
 
+    private void scheduleDefaultPriorityTaskNotification(Task task) {
+        Intent notificationIntent = new Intent(this, TaskNotificationReceiver.class);
+        notificationIntent.putExtra("taskTitle", task.getTitle());
+        notificationIntent.putExtra("taskDescription", task.getDescription());
+        notificationIntent.putExtra("taskImportance", Task.IMPORTANCE_DEFAULT);
 
+        PendingIntent pendingIntent = PendingIntent.getBroadcast(
+                this,
+                (int) System.currentTimeMillis(),
+                notificationIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
+        );
 
+        AlarmManager alarmManager = (AlarmManager) getSystemService(Context.ALARM_SERVICE);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && alarmManager.canScheduleExactAlarms()) {
+            alarmManager.setExact(AlarmManager.RTC_WAKEUP, task.getDueDate().getTime(), pendingIntent);
+        } else if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+            alarmManager.setExact(AlarmManager.RTC_WAKEUP, task.getDueDate().getTime(), pendingIntent);
+        } else {
+            Toast.makeText(this, "No se puede programar una alarma exacta, falta el permiso", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private void scheduleLowPriorityTaskNotification(Task task) {
+        Intent notificationIntent = new Intent(this, TaskNotificationReceiver.class);
+        notificationIntent.putExtra("taskTitle", task.getTitle());
+        notificationIntent.putExtra("taskDescription", task.getDescription());
+        notificationIntent.putExtra("taskImportance", Task.IMPORTANCE_LOW);
+
+        PendingIntent pendingIntent = PendingIntent.getBroadcast(
+                this,
+                (int) System.currentTimeMillis(),
+                notificationIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
+        );
+
+        AlarmManager alarmManager = (AlarmManager) getSystemService(Context.ALARM_SERVICE);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && alarmManager.canScheduleExactAlarms()) {
+            alarmManager.setExact(AlarmManager.RTC_WAKEUP, task.getDueDate().getTime(), pendingIntent);
+        } else if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+            alarmManager.setExact(AlarmManager.RTC_WAKEUP, task.getDueDate().getTime(), pendingIntent);
+        } else {
+            Toast.makeText(this, "No se puede programar una alarma exacta, falta el permiso", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private boolean alarmPermissionGranted() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            return ContextCompat.checkSelfPermission(this, Manifest.permission.SCHEDULE_EXACT_ALARM) == PackageManager.PERMISSION_GRANTED;
+        }
+        return true;
+    }
+
+    private void requestAlarmPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.SCHEDULE_EXACT_ALARM}, REQUEST_SCHEDULE_EXACT_ALARM);
+        }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == REQUEST_SCHEDULE_EXACT_ALARM) {
+            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                saveTask();
+            } else {
+                Toast.makeText(this, "Permiso de alarma exacta denegado", Toast.LENGTH_SHORT).show();
+            }
+        }
+    }
 }
