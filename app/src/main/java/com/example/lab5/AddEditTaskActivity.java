@@ -133,6 +133,10 @@ public class AddEditTaskActivity extends AppCompatActivity {
                 break;
         }
 
+        if (isTaskWithinNextThreeHours(dateTime)) {
+            importance = Task.IMPORTANCE_HIGH;
+        }
+
         Task task = new Task(title, description, dateTime.getTime(), importance);
 
         Intent resultIntent = new Intent();
@@ -150,6 +154,19 @@ public class AddEditTaskActivity extends AppCompatActivity {
         } else if (importance == Task.IMPORTANCE_LOW) {
             scheduleLowPriorityTaskNotification(task);
         }
+    }
+
+    private boolean isTaskWithinNextThreeHours(Calendar taskTime) {
+        Calendar now = Calendar.getInstance();
+        Calendar threeHoursLater = Calendar.getInstance();
+        threeHoursLater.add(Calendar.HOUR_OF_DAY, 3);
+
+        // Limpiar los milisegundos para evitar comparaciones incorrectas
+        now.clear(Calendar.MILLISECOND);
+        threeHoursLater.clear(Calendar.MILLISECOND);
+        taskTime.clear(Calendar.MILLISECOND);
+
+        return taskTime.compareTo(now) >= 0 && taskTime.compareTo(threeHoursLater) <= 0;
     }
 
     private void scheduleHighPriorityTaskNotification(Task task) {
