@@ -116,21 +116,19 @@ public class AddEditTaskActivity extends AppCompatActivity {
         String description = editTextDescription.getText().toString().trim();
         int importance = Task.IMPORTANCE_DEFAULT;
 
-        if (dateTime.getTimeInMillis() - System.currentTimeMillis() <= 3 * 60 * 60 * 1000) {
-            importance = Task.IMPORTANCE_HIGH;
-        } else {
-            switch (spinnerImportance.getSelectedItemPosition()) {
-                case 0:
-                    importance = Task.IMPORTANCE_HIGH;
-                    break;
-                case 1:
-                    importance = Task.IMPORTANCE_DEFAULT;
-                    break;
-                case 2:
-                    importance = Task.IMPORTANCE_LOW;
-                    break;
-            }
+        switch (spinnerImportance.getSelectedItemPosition()) {
+            case 0:
+                importance = Task.IMPORTANCE_LOW;
+                break;
+            case 1:
+                importance = Task.IMPORTANCE_DEFAULT;
+                break;
+            case 2:
+                importance = Task.IMPORTANCE_HIGH;
+                break;
         }
+
+        
 
         Task task = new Task(title, description, dateTime.getTime(), importance);
 
@@ -141,11 +139,18 @@ public class AddEditTaskActivity extends AppCompatActivity {
         }
         setResult(RESULT_OK, resultIntent);
         finish();
-
         contador=contador+1;
         showNotification(task);
         updatePersistentNotification(codigo,contador);
 
+    }
+
+    private boolean isTaskWithinNextThreeHours(Calendar taskTime) {
+        Calendar now = Calendar.getInstance();
+        Calendar threeHoursLater = Calendar.getInstance();
+        threeHoursLater.add(Calendar.HOUR_OF_DAY, 3);
+
+        return taskTime.after(now) && taskTime.before(threeHoursLater);
     }
 
     private void showNotification(Task task) {
@@ -187,7 +192,7 @@ public class AddEditTaskActivity extends AppCompatActivity {
 
         int taskCount =contador;
 
-                NotificationCompat.Builder taskCountNotificationBuilder = new NotificationCompat.Builder(this, CHANNEL_ID_LOW)
+        NotificationCompat.Builder taskCountNotificationBuilder = new NotificationCompat.Builder(this, CHANNEL_ID_LOW)
                 .setContentTitle("Tareas en curso")
                 .setContentText("Tienes " + taskCount + " tareas en curso")
                 .setSmallIcon(R.drawable.ic_notification)
